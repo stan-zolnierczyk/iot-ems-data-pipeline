@@ -19,7 +19,7 @@ def process_silver_layer():
 
         |> range(start: -10m)
         |> filter(fn: (r) => r._measurement == "power" or r._measurement == "energy")
-        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "value")
+        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     result = query_api.query_data_frame(query)
 
@@ -35,7 +35,10 @@ def process_silver_layer():
     if df.empty:
         print("Brak nowych danych w warstwie Bronze.")
         return
-
+    # To jest kluczowy most między Influx (_value) a Twoim czystym kodem (value)
+    if '_value' in df.columns:
+        df.rename(columns={'_value': 'value'}, inplace=True)
+        
     # --- PRZETWARZANIE POWER ---
     df_power = df[df['_measurement'] == 'power'].copy()
     if not df_power.empty:
