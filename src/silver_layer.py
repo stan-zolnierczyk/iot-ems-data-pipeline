@@ -21,7 +21,16 @@ def process_silver_layer():
         |> filter(fn: (r) => r._measurement == "power" or r._measurement == "energy")
         |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
-    df = query_api.query_data_frame(query)
+    result = query_api.query_data_frame(query)
+
+    # Jeśli Influx zwróci listę DataFrame-ów, połączymy je w jeden
+    if isinstance(result, list):
+        if len(result) > 0:
+            df = pd.concat(result, ignore_index=True)
+        else:
+            df = pd.DataFrame()
+    else:
+        df = result
 
     if df.empty:
         print("Brak nowych danych w warstwie Bronze.")
