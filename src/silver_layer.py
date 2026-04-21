@@ -19,7 +19,7 @@ def process_silver_layer():
 
         |> range(start: -10m)
         |> filter(fn: (r) => r._measurement == "power" or r._measurement == "energy")
-        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "value")
     '''
     result = query_api.query_data_frame(query)
 
@@ -42,8 +42,8 @@ def process_silver_layer():
         # Walidacja zakresów (Domain-aware filtering)
         # SUN2000: 0-10kW, DTSU666: -10kW do 10kW
         mask = (
-                ((df_power['device'] == 'SUN2000') & (df_power['_value'] >= 0) & (df_power['_value'] <= 10000)) |
-                ((df_power['device'] == 'DTSU666') & (df_power['_value'] >= -10000) & (df_power['_value'] <= 10000))
+                ((df_power['device'] == 'SUN2000') & (df_power['value'] >= 0) & (df_power['value'] <= 10000)) |
+                ((df_power['device'] == 'DTSU666') & (df_power['value'] >= -10000) & (df_power['value'] <= 10000))
         )
         df_power = df_power[mask]
 
@@ -59,7 +59,7 @@ def process_silver_layer():
     df_energy = df[df['_measurement'] == 'energy'].copy()
     if not df_energy.empty:
         # Walidacja: liczniki energii nie mogą być ujemne
-        df_energy = df_energy[df_energy['_value'] >= 0]
+        df_energy = df_energy[df_energy['value'] >= 0]
 
         if not df_energy.empty:
             df_energy['_measurement'] = 'energy_clean'
