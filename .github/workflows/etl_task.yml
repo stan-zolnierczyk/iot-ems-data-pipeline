@@ -1,26 +1,31 @@
-name: IoT ETL Pipeline
+name: Silver Layer ETL
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Uruchamiaj co 5 minut (GitHub ma limity na częstsze akcje)
-  workflow_dispatch: # Pozwala odpalić ręcznie dla testu
+    - cron: "*/5 * * * *" # Uruchamiaj co 5 minut
+  workflow_dispatch: # Pozwala na ręczne uruchomienie przyciskiem "Run workflow"
 
 jobs:
-  build:
+  run-etl:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: "3.9"
 
       - name: Install dependencies
-        run: pip install influxdb-client pandas
+        run: |
+          pip install -r requirements.txt
 
-      - name: Run ETL Script
+      - name: Run Silver Layer Script
+        # Tutaj przekazujemy sekrety z GitHuba do skryptu Pythona
         env:
-          INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }} # Token ukryty w ustawieniach repo
-        run: python your_script_name.py
+          INFLUX_URL: ${{ secrets.INFLUX_URL }}
+          INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
+          INFLUX_ORG: ${{ secrets.INFLUX_ORG }}
+          INFLUX_BUCKET: ${{ secrets.INFLUX_BUCKET }}
+        run: python src/silver_layer.py
