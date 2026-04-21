@@ -2,18 +2,18 @@ name: Silver Layer ETL
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # Uruchamiaj co 5 minut
-  workflow_dispatch: # Pozwala na ręczne uruchomienie przyciskiem "Run workflow"
+    - cron: "*/5 * * * *" # runs every 5min
+  workflow_dispatch: # allows manual execution
 
 jobs:
   run-etl:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Aktualizacja z v3 na v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # Aktualizacja z v4 na v5
         with:
           python-version: "3.9"
 
@@ -22,7 +22,6 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Silver Layer Script
-        # Tutaj przekazujemy sekrety z GitHuba do skryptu Pythona
         env:
           INFLUX_URL: ${{ secrets.INFLUX_URL }}
           INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
