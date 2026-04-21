@@ -19,6 +19,7 @@ def process_silver_layer():
 
         |> range(start: -10m)
         |> filter(fn: (r) => r._measurement == "power" or r._measurement == "energy")
+        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     df = query_api.query_data_frame(query)
 
