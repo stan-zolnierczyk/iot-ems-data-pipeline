@@ -24,6 +24,7 @@ def process_silver_layer():
 
         |> range(start: -15m)
         |> filter(fn: (r) => r._measurement == "power" or r._measurement == "energy")
+        |> filter(fn: (r) => r.measurement_type != "consumption")
         |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     
@@ -69,16 +70,39 @@ def process_silver_layer():
                 data_frame_tag_columns=['device']
             )
 
-    # --- ENERGY MEASUREMENTS PROCESSING ---
+    # --- ENERGY MEASUREMENTS PROCESSING (Silver Layer Logic) ---
     df_energy = df[df['_measurement'] == 'energy'].copy()
+    
     if not df_energy.empty:
-        # Cumulative energy counters must be non-negative
-        df_energy = df_energy[df_energy['value'] >= 0]
+        # Step A: Pivot to wide format to perform cross-column calculations
+        # This creates columns: 'production', 'import', 'export'
+        df_calc = df_energy.pivot_table(index='_time', columns='measurement_type', values='value')
 
-        if not df_energy.empty:
+        # Step B: Ensure all necessary columns exist (fill with 0 if missing for the timeframe)
+        for col in ['production', 'import', 'export']:
+            if col not in df_calc.columns:
+                df_calc[col] = 0.0
+
+        # Step C: Calculate Consumption (The Core Business Logic)
+        # Formula: Consumption = Production + Import - Export
+        df_calc['consumption'] = df_calc['production'] + df_calc['import'] - df_calc['export']
+
+        # Step D: Data Quality - Energy counters must be monotonic (non-decreasing)
+        # and non-negative. We apply this to all columns.
+        df_calc = df_calc.apply(lambda x: x if x.min() >= 0 else None)
+        df_calc.fillna(method='ffill', inplace=True)
+
+        # Step E: Transform back to 'Long Format' for InfluxDB compatibility
+        df_final_energy = df_calc.melt(ignore_index=False, var_name='measurement_type', value_name='value')
+        
+        # Step F: Clean up and Metadata assignment
+        df_final_energy.dropna(subset=['value'], inplace=True)
+        df_final_energy['device'] = 'EMS_Calculated'  # Mark that this data is derived from logic
+
+        if not df_final_energy.empty:
             write_api.write(
                 bucket=INFLUX_BUCKET, 
-                record=df_energy,
+                record=df_final_energy,
                 data_frame_measurement_name='energy_clean',
                 data_frame_tag_columns=['device', 'measurement_type']
             )
