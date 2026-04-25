@@ -93,6 +93,13 @@ def process_silver_layer():
         )
         df_power.dropna(subset=['value'], inplace=True)
 
+        # Assign specific measurement_type based on device
+        power_type_map = {
+            'SUN2000': 'instantaneousPower',
+            'DTSU666': 'powerBalance'
+        }
+        df_power['measurement_type'] = df_power['device'].map(power_type_map)
+
         if not df_power.empty:
             # KEEP ONLY RELEVANT DATA: (time is in index)
             final_power = df_power[['value', 'device']]
