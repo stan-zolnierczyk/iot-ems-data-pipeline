@@ -94,8 +94,8 @@ def process_silver_layer():
         df_power.dropna(subset=['value'], inplace=True)
 
         if not df_power.empty:
-            cols_to_drop = ['result', 'table', '_start', '_stop', '_measurement']
-            final_power = df_power.drop(columns=[c for c in cols_to_drop if c in df_power.columns])
+            # KEEP ONLY RELEVANT DATA: (time is in index)
+            final_power = df_power[['value', 'device']]
             
             write_api.write(bucket=INFLUX_BUCKET, record=final_power,
                             data_frame_measurement_name='power_clean',
@@ -105,30 +105,43 @@ def process_silver_layer():
     df_energy = df[df['_measurement'] == 'energy'].copy()
     
     if not df_energy.empty:
-        # Create device map BEFORE pivot to preserve metadata
+        # 1. IDENTIFY OUTLIERS (Domain-aware filtering): 
+        # Expected cumulative range: 0..120,000 Wh
+        energy_mask = df_energy['value'].between(0, 120000)
+        # Set outliers to NaN and forward fill within each measurement type
+        df_energy.loc[~energy_mask, 'value'] = pd.NA
+        df_energy['value'] = df_energy.groupby('measurement_type')['value'].transform(
+            lambda x: pd.to_numeric(x).ffill()
+        )
+
+        # 2. Create device map before pivot to preserve metadata
         device_map = df_energy.drop_duplicates('measurement_type').set_index('measurement_type')['device'].to_dict()
-
+        
+        # 3. Pivot to wide format for calculations
         df_calc = df_energy.pivot_table(index='_time', columns='measurement_type', values='value')
-
+        
+        # 4. Ensure all columns exist and handle missing data
         for col in ['production', 'import', 'export']:
             if col not in df_calc.columns:
-                df_calc[col] = pd.NA
-        
+                df_calc[col] = pd.NA      
         # Incremental Load friendly: fill gaps and maintain counters
         df_calc = df_calc.sort_index().ffill().fillna(0.0)
 
-        # Main Business Logic
+        # 5. Energy consumption calculation
         df_calc['consumption'] = df_calc['production'] + df_calc['import'] - df_calc['export']
 
-        # Monotonicity check for counters
+        # 6. Monotonicity check for counters
         for col in df_calc.columns:
             diff = df_calc[col].diff()
             df_calc.loc[diff < 0, col] = pd.NA        
         df_calc = df_calc.ffill()
 
+        # 7. Transform back to Long Format and restore devices
         df_final_energy = df_calc.melt(ignore_index=False, var_name='measurement_type', value_name='value')
         df_final_energy['device'] = df_final_energy['measurement_type'].map(device_map).fillna('EMS_Calculated')
 
+        # KEEP ONLY RELEVANT DATA: (time is in index)
+        final_energy = df_final_energy[['value', 'device', 'measurement_type']]
         if not df_final_energy.empty:
             write_api.write(bucket=INFLUX_BUCKET, record=df_final_energy,
                             data_frame_measurement_name='energy_clean',
