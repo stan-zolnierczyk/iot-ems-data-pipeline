@@ -1,19 +1,19 @@
-name: Silver Layer ETL
+name: IoT Data Pipeline
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # runs every 5min
-  workflow_dispatch: # allows manual execution
+    - cron: "*/5 * * * *" # Runs every 5 minutes (subject to GitHub delays)
+  workflow_dispatch: # Allows manual execution from the Actions tab
 
 jobs:
-  run-etl:
+  run-pipeline:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # Aktualizacja z v3 na v4
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # Aktualizacja z v4 na v5
+        uses: actions/setup-python@v5
         with:
           python-version: "3.9"
 
@@ -21,10 +21,18 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run Silver Layer Script
+      - name: Run Silver Layer (Cleaning & Validation)
         env:
           INFLUX_URL: ${{ secrets.INFLUX_URL }}
           INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
           INFLUX_ORG: ${{ secrets.INFLUX_ORG }}
           INFLUX_BUCKET: ${{ secrets.INFLUX_BUCKET }}
         run: python src/silver_layer.py
+
+      - name: Run Gold Layer (Hourly Aggregation)
+        env:
+          INFLUX_URL: ${{ secrets.INFLUX_URL }}
+          INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
+          INFLUX_ORG: ${{ secrets.INFLUX_ORG }}
+          INFLUX_BUCKET: ${{ secrets.INFLUX_BUCKET }}
+        run: python src/gold_layer.py
