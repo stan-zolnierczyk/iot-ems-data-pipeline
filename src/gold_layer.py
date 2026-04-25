@@ -20,11 +20,13 @@ def process_gold_layer():
     # 1. FETCH DATA (Silver Layer)
     # Fetch last 24h to ensure there is enough data for full hourly buckets
     query = f'''
+    import "influxdata/influxdb/schema"
+
     from(bucket: "{INFLUX_BUCKET}")
 
         |> range(start: -24h)
         |> filter(fn: (r) => r._measurement == "power_clean" or r._measurement == "energy_clean")
-        |> pivot(rowKey:["_time"], columnKey: ["measurement_type"], valueColumn: "_value")
+        |> schema.fieldsAsCols()
     '''
     
     raw_data = query_api.query_data_frame(query)
