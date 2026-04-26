@@ -40,8 +40,8 @@ def process_gold_layer():
     df = df.pivot_table(index='_time', columns='measurement_type', values='_value')
 
     # Data Preparation
-    df['_time'] = pd.to_datetime(df['_time'], utc=True)
-    df = df.sort_values('_time').set_index('_time')
+    df.index = pd.to_datetime(df.index, utc=True)
+    df = df.sort_index()
     print(f"Columns available for aggregation: {df.columns.tolist()}")
 
     # --- AVERAGE POWER HOURLY ---
