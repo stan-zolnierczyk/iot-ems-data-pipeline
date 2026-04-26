@@ -26,8 +26,8 @@ def process_gold_layer():
 
         |> range(start: -24h)
         |> filter(fn: (r) => r._measurement == "power_clean" or r._measurement == "energy_clean")
-
-        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        |> filter(fn: (r) => r._field == "value") 
+        |> pivot(rowKey:["_time"], columnKey: ["measurement_type"], valueColumn: "_value")
     '''
     
     raw_data = query_api.query_data_frame(query)
