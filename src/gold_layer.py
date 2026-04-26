@@ -17,7 +17,7 @@ def process_gold_layer():
     query_api = client.query_api()
     write_api = client.write_api(write_options=SYNCHRONOUS)
 
-    # 1. FETCH DATA (Silver Layer)
+    # FETCH DATA (Silver Layer)
     # Fetch last 24h to ensure there is enough data for full hourly buckets
     query = f'''
     import "influxdata/influxdb/schema"
@@ -26,8 +26,6 @@ def process_gold_layer():
 
         |> range(start: -24h)
         |> filter(fn: (r) => r._measurement == "power_clean" or r._measurement == "energy_clean")
-        |> filter(fn: (r) => r._field == "value") 
-        |> pivot(rowKey:["_time"], columnKey: ["_measurement_type"], valueColumn: "_value")
     '''
     
     raw_data = query_api.query_data_frame(query)
@@ -37,6 +35,9 @@ def process_gold_layer():
         print("No Silver data found for Gold processing. Exiting.")
         client.close()
         return
+
+    # PIVOT IN PANDAS (Instead of Flux) - creates columns from 'measurement_type' and uses '_value' as data
+    df = df.pivot_table(index='_time', columns='measurement_type', values='_value')
 
     # Data Preparation
     df['_time'] = pd.to_datetime(df['_time'], utc=True)
