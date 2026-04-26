@@ -26,7 +26,7 @@ def process_gold_layer():
 
         |> range(start: -24h)
         |> filter(fn: (r) => r._measurement == "power_clean" or r._measurement == "energy_clean")
-        |> schema.fieldsAsCols()
+        |> pivot(rowKey:["_time"], columnKey: ["measurement_type"], valueColumn: "_value")
     '''
     
     raw_data = query_api.query_data_frame(query)
@@ -40,6 +40,7 @@ def process_gold_layer():
     # Data Preparation
     df['_time'] = pd.to_datetime(df['_time'], utc=True)
     df = df.sort_values('_time').set_index('_time')
+    print(f"Columns available for aggregation: {df.columns.tolist()}")
 
     # --- AVERAGE POWER HOURLY ---
     power_fields = ['instantaneousPower', 'powerBalance']
