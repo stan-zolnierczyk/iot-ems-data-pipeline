@@ -99,6 +99,56 @@ def process_gold_layer():
                             data_frame_tag_columns=['device', 'measurement_type'])
             print(f"Processed {len(df_energy_gold)} hourly energy records.")
 
+    # --- BATTERY SIMULATION (10kWh Storage) ---
+    if 'export' in df.columns and 'import' in df.columns:
+        print("Starting 10kWh Battery Simulation...")
+        
+        # Calculate 1-minute increments (energy flow in each minute)
+        df_batt = df[['export', 'import']].sort_index().diff().fillna(0)
+        
+        capacity_wh = 10000  # 10 kWh
+        current_soc = 0      # Start with empty battery
+        
+        soc_history = []
+        reduced_import = []
+        reduced_export = []
+
+        for _, row in df_batt.iterrows():
+            m_export = row['export']
+            m_import = row['import']
+            
+            # CHARGING: Use export to charge battery
+            if m_export > 0:
+                charge_amount = min(m_export, capacity_wh - current_soc)
+                current_soc += charge_amount
+                m_export -= charge_amount  # Remaining export after charging
+                
+            # DISCHARGING: Use battery to cover import
+            elif m_import > 0:
+                discharge_amount = min(m_import, current_soc)
+                current_soc -= discharge_amount
+                m_import -= discharge_amount  # Remaining import after battery support
+            
+            soc_history.append(current_soc)
+            reduced_export.append(m_export)
+            reduced_import.append(m_import)
+
+        # Create results DataFrame
+        df_sim = pd.DataFrame(index=df_batt.index)
+        df_sim['battery_soc'] = soc_history
+        df_sim['export_simulated'] = reduced_export
+        df_sim['import_simulated'] = reduced_import
+        
+        # Prepare for InfluxDB (unpivot)
+        df_sim_gold = df_sim.melt(ignore_index=False, var_name='measurement_type', value_name='value')
+        df_sim_gold['device'] = 'Battery_Simulator_10kWh'
+
+        write_api.write(bucket=INFLUX_BUCKET, record=df_sim_gold,
+                        data_frame_measurement_name='battery_simulation',
+                        data_frame_tag_columns=['device', 'measurement_type'])
+        print(f"Battery simulation completed for {len(df_sim)} intervals.")
+
+
     print("Gold layer update successful.")
     client.close()
 
