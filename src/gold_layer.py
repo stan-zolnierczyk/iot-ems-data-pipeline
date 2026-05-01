@@ -136,14 +136,19 @@ def process_gold_layer():
         # Create results DataFrame
         df_sim = pd.DataFrame(index=df_batt.index)
         df_sim['battery_soc'] = soc_history
-        df_sim['export_simulated'] = reduced_export
-        df_sim['import_simulated'] = reduced_import
+        
+        # Convert increments back to cumulative counters (Starting from original base value)
+        df_sim['export_simulated'] = df['export'].iloc[0] + pd.Series(reduced_export, index=df_batt.index).cumsum()
+        df_sim['import_simulated'] = df['import'].iloc[0] + pd.Series(reduced_import, index=df_batt.index).cumsum()
         
         # Prepare for InfluxDB (unpivot)
         df_sim_gold = df_sim.melt(ignore_index=False, var_name='measurement_type', value_name='value')
         df_sim_gold['device'] = 'Battery_Simulator_10kWh'
 
-        write_api.write(bucket=INFLUX_BUCKET, record=df_sim_gold,
+        # Selecting final columns for write consistency
+        final_sim_gold = df_sim_gold[['value', 'device', 'measurement_type']]
+
+        write_api.write(bucket=INFLUX_BUCKET, record=final_sim_gold,
                         data_frame_measurement_name='battery_simulation',
                         data_frame_tag_columns=['device', 'measurement_type'])
         print(f"Battery simulation completed for {len(df_sim)} intervals.")
