@@ -107,9 +107,26 @@ def process_gold_layer():
         df_batt = df[['export', 'import']].sort_index().diff().fillna(0)
         
         capacity_wh = 10000  # 10 kWh
-        current_soc = 0      # Start with empty battery
-        
-        soc_history = []
+
+        # Persist stored_energy between runs: read last known value from InfluxDB
+        persistence_query = f'''
+from(bucket: "{INFLUX_BUCKET}")
+    |> range(start: -30d)
+    |> filter(fn: (r) => r._measurement == "battery_simulation")
+    |> filter(fn: (r) => r.measurement_type == "stored_energy")
+    |> filter(fn: (r) => r._field == "value")
+    |> last()
+'''
+        try:
+            last_se_df = query_api.query_data_frame(persistence_query)
+            if isinstance(last_se_df, list):
+                last_se_df = pd.concat(last_se_df, ignore_index=True) if last_se_df else pd.DataFrame()
+            current_stored_energy = float(last_se_df['_value'].iloc[-1]) if not last_se_df.empty else 0
+        except Exception:
+            current_stored_energy = 0
+        print(f"Battery simulation starting with stored_energy={current_stored_energy:.1f} Wh")
+
+        stored_energy_history = []
         reduced_import = []
         reduced_export = []
 
@@ -119,23 +136,23 @@ def process_gold_layer():
             
             # CHARGING: Use export to charge battery
             if m_export > 0:
-                charge_amount = min(m_export, capacity_wh - current_soc)
-                current_soc += charge_amount
+                charge_amount = min(m_export, capacity_wh - current_stored_energy)
+                current_stored_energy += charge_amount
                 m_export -= charge_amount  # Remaining export after charging
-                
+
             # DISCHARGING: Use battery to cover import
             elif m_import > 0:
-                discharge_amount = min(m_import, current_soc)
-                current_soc -= discharge_amount
+                discharge_amount = min(m_import, current_stored_energy)
+                current_stored_energy -= discharge_amount
                 m_import -= discharge_amount  # Remaining import after battery support
-            
-            soc_history.append(current_soc)
+
+            stored_energy_history.append(current_stored_energy)
             reduced_export.append(m_export)
             reduced_import.append(m_import)
 
         # Create results DataFrame
         df_sim = pd.DataFrame(index=df_batt.index)
-        df_sim['battery_soc'] = soc_history
+        df_sim['stored_energy'] = stored_energy_history
         
         # Convert increments back to cumulative counters (Starting from original base value)
         df_sim['export_simulated'] = df['export'].iloc[0] + pd.Series(reduced_export, index=df_batt.index).cumsum()
