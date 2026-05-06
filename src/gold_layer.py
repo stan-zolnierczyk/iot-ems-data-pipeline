@@ -108,27 +108,35 @@ def process_gold_layer():
         
         capacity_wh = 10000  # 10 kWh
 
-        # Persist stored_energy between runs: read last known value from InfluxDB
+        # Persist all simulation counters between runs: read last known values from InfluxDB
         persistence_query = f'''
 from(bucket: "{INFLUX_BUCKET}")
     |> range(start: -30d)
     |> filter(fn: (r) => r._measurement == "battery_simulation")
-    |> filter(fn: (r) => r.measurement_type == "stored_energy")
     |> filter(fn: (r) => r._field == "value")
     |> last()
 '''
         try:
-            last_se_df = query_api.query_data_frame(persistence_query)
-            if isinstance(last_se_df, list):
-                last_se_df = pd.concat(last_se_df, ignore_index=True) if last_se_df else pd.DataFrame()
-            current_stored_energy = float(last_se_df['_value'].iloc[-1]) if not last_se_df.empty else 0
+            last_batt_df = query_api.query_data_frame(persistence_query)
+            if isinstance(last_batt_df, list):
+                last_batt_df = pd.concat(last_batt_df, ignore_index=True) if last_batt_df else pd.DataFrame()
+            if not last_batt_df.empty and 'measurement_type' in last_batt_df.columns:
+                batt_last = last_batt_df.set_index('measurement_type')['_value']
+                current_stored_energy = float(batt_last.get('stored_energy', 0))
+                current_import_sim = float(batt_last.get('import_simulated', df['import'].iloc[0]))
+                current_export_sim = float(batt_last.get('export_simulated', df['export'].iloc[0]))
+            else:
+                current_stored_energy = 0
+                current_import_sim = df['import'].iloc[0]
+                current_export_sim = df['export'].iloc[0]
         except Exception:
             current_stored_energy = 0
-        print(f"Battery simulation starting with stored_energy={current_stored_energy:.1f} Wh")
+            current_import_sim = df['import'].iloc[0]
+            current_export_sim = df['export'].iloc[0]
+        print(f"Battery simulation starting with stored_energy={current_stored_energy:.1f} Wh, "
+              f"import_simulated={current_import_sim:.1f} Wh, export_simulated={current_export_sim:.1f} Wh")
 
         stored_energy_history = []
-        current_import_sim = df['import'].iloc[0]
-        current_export_sim = df['export'].iloc[0]
         import_sim_history = []
         export_sim_history = []
 
