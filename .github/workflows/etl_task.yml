@@ -29,10 +29,18 @@ jobs:
           INFLUX_BUCKET: ${{ secrets.INFLUX_BUCKET }}
         run: python src/silver_layer.py
 
-      - name: Run Gold Layer (Hourly Aggregation)
+      - name: Run Gold Aggregator (Hourly Aggregation)
         env:
           INFLUX_URL: ${{ secrets.INFLUX_URL }}
           INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
           INFLUX_ORG: ${{ secrets.INFLUX_ORG }}
           INFLUX_BUCKET: ${{ secrets.INFLUX_BUCKET }}
-        run: python src/gold_layer.py
+        run: python src/gold_aggregator.py
+
+      - name: Run Gold Battery Simulator (ROI Simulation)
+        env:
+          INFLUX_URL: ${{ secrets.INFLUX_URL }}
+          INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
+          INFLUX_ORG: ${{ secrets.INFLUX_ORG }}
+          INFLUX_BUCKET: ${{ secrets.INFLUX_BUCKET }}
+        run: python src/gold_battery_sim.py
