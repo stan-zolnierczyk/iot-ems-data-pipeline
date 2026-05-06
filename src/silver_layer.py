@@ -143,6 +143,7 @@ def process_silver_layer():
 
         # 7. Transform back to Long Format and restore devices
         df_final_energy = df_calc.melt(ignore_index=False, var_name='measurement_type', value_name='value')
+        df_final_energy = df_final_energy.sort_index()
         df_final_energy['device'] = df_final_energy['measurement_type'].map(device_map).fillna('EMS_Calculated')
 
         # KEEP ONLY RELEVANT DATA: (time is in index)
