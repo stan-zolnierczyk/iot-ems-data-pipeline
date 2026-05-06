@@ -127,13 +127,23 @@ from(bucket: "{INFLUX_BUCKET}")
         print(f"Battery simulation starting with stored_energy={current_stored_energy:.1f} Wh")
 
         stored_energy_history = []
-        reduced_import = []
-        reduced_export = []
+        current_import_sim = df['import'].iloc[0]
+        current_export_sim = df['export'].iloc[0]
+        import_sim_history = []
+        export_sim_history = []
 
         for _, row in df_batt.iterrows():
             m_export = row['export']
             m_import = row['import']
-            
+
+            # Counter reset (midnight): reset simulated counters to 0, skip increment
+            if m_export < 0:
+                current_export_sim = 0
+                m_export = 0
+            if m_import < 0:
+                current_import_sim = 0
+                m_import = 0
+
             # CHARGING: Use export to charge battery
             if m_export > 0:
                 charge_amount = min(m_export, capacity_wh - current_stored_energy)
@@ -146,17 +156,18 @@ from(bucket: "{INFLUX_BUCKET}")
                 current_stored_energy -= discharge_amount
                 m_import -= discharge_amount  # Remaining import after battery support
 
+            current_export_sim += m_export
+            current_import_sim += m_import
+
             stored_energy_history.append(current_stored_energy)
-            reduced_export.append(m_export)
-            reduced_import.append(m_import)
+            export_sim_history.append(current_export_sim)
+            import_sim_history.append(current_import_sim)
 
         # Create results DataFrame
         df_sim = pd.DataFrame(index=df_batt.index)
         df_sim['stored_energy'] = stored_energy_history
-        
-        # Convert increments back to cumulative counters (Starting from original base value)
-        df_sim['export_simulated'] = df['export'].iloc[0] + pd.Series(reduced_export, index=df_batt.index).cumsum()
-        df_sim['import_simulated'] = df['import'].iloc[0] + pd.Series(reduced_import, index=df_batt.index).cumsum()
+        df_sim['export_simulated'] = export_sim_history
+        df_sim['import_simulated'] = import_sim_history
         
         # Prepare for InfluxDB (unpivot)
         df_sim_gold = df_sim.melt(ignore_index=False, var_name='measurement_type', value_name='value')
