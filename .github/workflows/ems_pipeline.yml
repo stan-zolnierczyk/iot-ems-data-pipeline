@@ -1,4 +1,4 @@
-name: IoT Data Pipeline
+name: EMS IoT Data Pipeline
 
 on:
   schedule:
