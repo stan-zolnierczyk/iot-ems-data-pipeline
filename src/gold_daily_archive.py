@@ -90,6 +90,12 @@ from(bucket: "{INFLUX_BUCKET}")
     os.makedirs(os.path.dirname(os.path.abspath(CSV_PATH)), exist_ok=True)
     df_row = pd.DataFrame([row])
     file_exists = os.path.exists(CSV_PATH)
+    if file_exists:
+        df_existing = pd.read_csv(CSV_PATH)
+        if date_label in df_existing['date'].values:
+            print(f"Entry for {date_label} already exists. Skipping.")
+            client.close()
+            return
     df_row.to_csv(CSV_PATH, mode='a', header=not file_exists, index=False)
 
     print(f"Daily archive entry written for {date_label}: {row}")
