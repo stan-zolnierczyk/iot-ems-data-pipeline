@@ -50,6 +50,7 @@ def process_battery_simulation():
     df_batt = df[['export', 'import']].sort_index().diff().fillna(0)
 
     capacity_wh = 10000  # 10 kWh
+    price_per_kwh = 0.98  # PLN
 
     # Persist all simulation counters between runs: read last known values from InfluxDB
     persistence_query = f'''
@@ -119,6 +120,10 @@ from(bucket: "{INFLUX_BUCKET}")
     df_sim['stored_energy'] = stored_energy_history
     df_sim['export_simulated'] = export_sim_history
     df_sim['import_simulated'] = import_sim_history
+
+    # Hypothetical savings: energy NOT imported from grid thanks to the battery (day-cumulative, resets at midnight)
+    savings_wh = df['import'].values - df_sim['import_simulated'].values
+    df_sim['daily_savings_pln'] = savings_wh / 1000 * price_per_kwh
 
     # Prepare for InfluxDB (unpivot)
     df_sim_gold = df_sim.melt(ignore_index=False, var_name='measurement_type', value_name='value')
