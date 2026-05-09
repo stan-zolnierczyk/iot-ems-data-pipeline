@@ -24,12 +24,13 @@ def process_daily_archive():
     client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
     query_api = client.query_api()
 
-    # Define previous complete day boundaries (UTC)
+    # Define previous complete day boundaries (UTC): yesterday 00:00:00 → 23:59:59
     today_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday_utc = today_utc - timedelta(days=1)
-    date_label = yesterday_utc.strftime('%Y-%m-%d')
-    start = yesterday_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-    stop = today_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+    yesterday_start = today_utc - timedelta(days=1)
+    yesterday_end = yesterday_start.replace(hour=23, minute=59, second=59)
+    date_label = yesterday_start.strftime('%Y-%m-%d')
+    start = yesterday_start.strftime('%Y-%m-%dT%H:%M:%SZ')
+    stop = yesterday_end.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     print(f"Processing daily archive for {date_label} ({start} -> {stop})")
 
@@ -68,11 +69,10 @@ from(bucket: "{INFLUX_BUCKET}")
         raw = query_api.query_data_frame(battery_query)
         df_b = pd.concat(raw, ignore_index=True) if isinstance(raw, list) else raw
         if not df_b.empty:
-            df_b = df_b.sort_values('_time')
-            lasts = df_b.groupby('measurement_type')['_value'].last()
-            battery_daily['import_simulated'] = round(float(lasts.get('import_simulated', 0)) / 1000, 3)
-            battery_daily['export_simulated'] = round(float(lasts.get('export_simulated', 0)) / 1000, 3)
-            battery_daily['daily_savings_pln'] = round(float(lasts.get('daily_savings_pln', 0)), 2)
+            maxes = df_b.groupby('measurement_type')['_value'].max()
+            battery_daily['import_simulated'] = round(float(maxes.get('import_simulated', 0)) / 1000, 3)
+            battery_daily['export_simulated'] = round(float(maxes.get('export_simulated', 0)) / 1000, 3)
+            battery_daily['daily_savings_pln'] = round(float(maxes.get('daily_savings_pln', 0)), 2)
     except Exception as e:
         print(f"Warning: battery_simulation fetch failed: {e}")
 
