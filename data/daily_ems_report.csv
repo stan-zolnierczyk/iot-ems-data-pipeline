@@ -1,2 +1,3 @@
 date,production_kwh,import_kwh,export_kwh,consumption_kwh,import_simulated_kwh,export_simulated_kwh,daily_savings_pln
 2026-05-07,24.84,3.39,16.1,24.75,0.0,0.0,1.14
+2026-05-08,32.2,6.27,18.18,31.59,0.0,0.0,1.05
