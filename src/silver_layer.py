@@ -8,9 +8,13 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import INFLUX_URL, INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET
 
+# Maximum plausible counter increment between consecutive samples (Wh).
+# Used to reject upward spikes that pass the domain range filter.
+ENERGY_MAX_INCREMENT_WH = 1000
+
 def get_last_timestamp(client):
     """
-    Queries InfluxDB for the last processed record in the Silver layer 
+    Queries InfluxDB for the last processed record in the Silver layer
     to enable Incremental Loading.
     """
     query = f'''
@@ -24,6 +28,49 @@ def get_last_timestamp(client):
     if tables and len(tables) > 0 and len(tables[0].records) > 0:
         return tables[0].records[0].get_time()
     return None
+
+def get_last_silver_values(client):
+    """
+    Queries InfluxDB for the last known good value per measurement_type in
+    energy_clean. Used as cross-batch anchor for monotonicity and spike filtering.
+    """
+    query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+        |> range(start: -7d)
+        |> filter(fn: (r) => r._measurement == "energy_clean")
+        |> filter(fn: (r) => r._field == "value")
+        |> last()
+    '''
+    anchors = {}
+    try:
+        tables = client.query_api().query(query)
+        for table in tables:
+            for record in table.records:
+                mt = record.values.get('measurement_type')
+                if mt is not None:
+                    anchors[mt] = float(record.get_value())
+    except Exception as e:
+        print(f"Warning: failed to fetch silver anchor values: {e}")
+    return anchors
+
+def clean_energy_counter(series, anchor, max_increment):
+    """
+    Cleans a cumulative energy counter by enforcing two constraints per sample:
+      - Monotonicity: current must be >= last_valid (rejects drops at any row)
+      - Bounded increments: current - last_valid must be <= max_increment
+        (rejects upward spikes that pass the domain range filter)
+    Invalid samples are replaced with last_valid. The 'anchor' provides the
+    initial last_valid baseline for cross-batch continuity.
+    """
+    last_valid = anchor if anchor is not None else 0
+    cleaned = []
+    for v in series.values:
+        if pd.isna(v) or v < last_valid or (v - last_valid) > max_increment:
+            cleaned.append(last_valid)
+        else:
+            cleaned.append(v)
+            last_valid = v
+    return pd.Series(cleaned, index=series.index)
 
 def process_silver_layer():
     """
@@ -132,16 +179,28 @@ def process_silver_layer():
         # Incremental Load friendly: fill gaps and maintain counters
         df_calc = df_calc.sort_index().ffill().fillna(0.0)
 
-        # 5. Energy consumption calculation
+        # 5. Clean source counters: enforce monotonicity + filter upward spikes
+        # Uses cross-batch anchor from energy_clean so the first row of each batch
+        # is validated against the last known good value (not against NaN).
+        anchors = get_last_silver_values(client)
+        for col in ['production', 'import', 'export']:
+            df_calc[col] = clean_energy_counter(
+                df_calc[col],
+                anchor=anchors.get(col, 0),
+                max_increment=ENERGY_MAX_INCREMENT_WH,
+            )
+
+        # 6. Energy consumption calculation (derived from cleaned source counters)
         df_calc['consumption'] = df_calc['production'] + df_calc['import'] - df_calc['export']
 
-        # 6. Monotonicity check for counters
-        for col in df_calc.columns:
-            diff = df_calc[col].diff()
-            df_calc.loc[diff < 0, col] = pd.NA        
-        df_calc = df_calc.ffill()
+        # 7. Clean consumption (also a monotonic counter)
+        df_calc['consumption'] = clean_energy_counter(
+            df_calc['consumption'],
+            anchor=anchors.get('consumption', 0),
+            max_increment=ENERGY_MAX_INCREMENT_WH,
+        )
 
-        # 7. Transform back to Long Format and restore devices
+        # 8. Transform back to Long Format and restore devices
         df_final_energy = df_calc.melt(ignore_index=False, var_name='measurement_type', value_name='value')
         df_final_energy = df_final_energy.sort_index()
         df_final_energy['device'] = df_final_energy['measurement_type'].map(device_map).fillna('EMS_Calculated')

@@ -42,7 +42,7 @@ from(bucket: "{INFLUX_BUCKET}")
     |> filter(fn: (r) => r._field == "value")
 '''
 
-    # --- BATTERY SIMULATION: cumulative counters that reset at midnight → LAST value = daily total ---
+    # --- BATTERY SIMULATION: cumulative counters that reset at midnight
     battery_query = f'''
 from(bucket: "{INFLUX_BUCKET}")
     |> range(start: {start}, stop: {stop})
