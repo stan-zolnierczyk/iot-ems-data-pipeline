@@ -29,48 +29,18 @@ def get_last_timestamp(client):
         return tables[0].records[0].get_time()
     return None
 
-def get_last_silver_values(client):
+def filter_upward_spikes(series, window=5, max_spike_wh=ENERGY_MAX_INCREMENT_WH):
     """
-    Queries InfluxDB for the last known good value per measurement_type in
-    energy_clean. Used as cross-batch anchor for monotonicity and spike filtering.
+    Replaces upward spikes with the centered rolling median. A value is treated
+    as a spike if it exceeds the rolling median by more than max_spike_wh.
+    Downward movements (e.g., midnight counter resets) are NOT touched, so
+    daily counters that reset at 00:00 pass through unchanged.
     """
-    query = f'''
-    from(bucket: "{INFLUX_BUCKET}")
-        |> range(start: -7d)
-        |> filter(fn: (r) => r._measurement == "energy_clean")
-        |> filter(fn: (r) => r._field == "value")
-        |> last()
-    '''
-    anchors = {}
-    try:
-        tables = client.query_api().query(query)
-        for table in tables:
-            for record in table.records:
-                mt = record.values.get('measurement_type')
-                if mt is not None:
-                    anchors[mt] = float(record.get_value())
-    except Exception as e:
-        print(f"Warning: failed to fetch silver anchor values: {e}")
-    return anchors
-
-def clean_energy_counter(series, anchor, max_increment):
-    """
-    Cleans a cumulative energy counter by enforcing two constraints per sample:
-      - Monotonicity: current must be >= last_valid (rejects drops at any row)
-      - Bounded increments: current - last_valid must be <= max_increment
-        (rejects upward spikes that pass the domain range filter)
-    Invalid samples are replaced with last_valid. The 'anchor' provides the
-    initial last_valid baseline for cross-batch continuity.
-    """
-    last_valid = anchor if anchor is not None else 0
-    cleaned = []
-    for v in series.values:
-        if pd.isna(v) or v < last_valid or (v - last_valid) > max_increment:
-            cleaned.append(last_valid)
-        else:
-            cleaned.append(v)
-            last_valid = v
-    return pd.Series(cleaned, index=series.index)
+    rolling_median = series.rolling(window, center=True, min_periods=1).median()
+    spike_mask = (series - rolling_median) > max_spike_wh
+    cleaned = series.copy()
+    cleaned.loc[spike_mask] = rolling_median.loc[spike_mask]
+    return cleaned
 
 def process_silver_layer():
     """
@@ -179,26 +149,17 @@ def process_silver_layer():
         # Incremental Load friendly: fill gaps and maintain counters
         df_calc = df_calc.sort_index().ffill().fillna(0.0)
 
-        # 5. Clean source counters: enforce monotonicity + filter upward spikes
-        # Uses cross-batch anchor from energy_clean so the first row of each batch
-        # is validated against the last known good value (not against NaN).
-        anchors = get_last_silver_values(client)
+        # 5. Filter upward spikes in source counters (rolling-median based).
+        # Downward jumps are preserved so daily midnight resets pass through
+        # naturally; gold_aggregator.py handles negative diffs at reset boundary.
         for col in ['production', 'import', 'export']:
-            df_calc[col] = clean_energy_counter(
-                df_calc[col],
-                anchor=anchors.get(col, 0),
-                max_increment=ENERGY_MAX_INCREMENT_WH,
-            )
+            df_calc[col] = filter_upward_spikes(df_calc[col])
 
-        # 6. Energy consumption calculation (derived from cleaned source counters)
+        # 6. Energy consumption calculation (derived from filtered source counters)
         df_calc['consumption'] = df_calc['production'] + df_calc['import'] - df_calc['export']
 
-        # 7. Clean consumption (also a monotonic counter)
-        df_calc['consumption'] = clean_energy_counter(
-            df_calc['consumption'],
-            anchor=anchors.get('consumption', 0),
-            max_increment=ENERGY_MAX_INCREMENT_WH,
-        )
+        # 7. Filter upward spikes in consumption
+        df_calc['consumption'] = filter_upward_spikes(df_calc['consumption'])
 
         # 8. Transform back to Long Format and restore devices
         df_final_energy = df_calc.melt(ignore_index=False, var_name='measurement_type', value_name='value')
