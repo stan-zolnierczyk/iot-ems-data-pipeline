@@ -1,3 +1,21 @@
+"""
+Gold Layer ETL — hourly aggregation of EMS metrics.
+
+Reads cleaned Silver-layer data (power_clean, energy_clean) from InfluxDB,
+resamples it to clock-aligned hourly buckets, and writes aggregates back to InfluxDB:
+
+  - power_hourly:   mean instantaneous power (PV panels) and power balance 
+                    (smart meter) per hour.
+  - energy_hourly:  incremental energy delta per hour for each metric
+                    (production, import, export, consumption). Negative
+                    diffs caused by midnight counter resets are clamped
+                    to zero.
+
+Designed to run every 5 minutes, but aggregation is deterministic,
+so re-processing the same window produces identical output and safely
+overwrites prior records.
+"""
+
 import sys
 import os
 import pandas as pd

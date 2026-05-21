@@ -1,3 +1,23 @@
+"""
+Gold Layer ETL — daily CSV archive of EMS metrics.
+
+Aggregates the previous complete day (00:00:00 -> 23:59:59 UTC) from
+the Gold layer in InfluxDB into a single row appended to
+data/daily_ems_report.csv in the GitHub repository. Provides a long-term,
+git-tracked record with infinite retention.
+
+Columns:    date, production_kwh, import_kwh, export_kwh, consumption_kwh,
+            import_simulated_kwh, export_simulated_kwh, daily_savings_pln.
+
+Source-aware aggregation: 
+SUM of hourly deltas for energy_hourly metrics, 
+MAX for daily-cumulative counters in battery_simulation.
+Idempotent — re-running on the same day will not produce duplicate rows.
+
+Scheduled to run once per day shortly after midnight UTC via GitHub
+Actions, which then commits and pushes the updated CSV.
+"""
+
 import sys
 import os
 import pandas as pd
@@ -34,7 +54,7 @@ def process_daily_archive():
 
     print(f"Processing daily archive for {date_label} ({start} -> {stop})")
 
-    # --- ENERGY HOURLY: each record is an hourly delta, so daily total = SUM ---
+    # --- ENERGY HOURLY: 
     energy_query = f'''
 from(bucket: "{INFLUX_BUCKET}")
     |> range(start: {start}, stop: {stop})
@@ -42,7 +62,7 @@ from(bucket: "{INFLUX_BUCKET}")
     |> filter(fn: (r) => r._field == "value")
 '''
 
-    # --- BATTERY SIMULATION: cumulative counters that reset at midnight
+    # --- BATTERY SIMULATION: 
     battery_query = f'''
 from(bucket: "{INFLUX_BUCKET}")
     |> range(start: {start}, stop: {stop})

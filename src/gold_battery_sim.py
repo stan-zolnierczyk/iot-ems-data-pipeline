@@ -1,3 +1,24 @@
+"""
+Gold Layer ETL — 10 kWh battery storage digital twin.
+
+The script simulates a hypothetical 10 kWh battery. It operates on the 
+Silver-layer import/export energy stream and writes four series to the
+battery_simulation measurement:
+
+  - stored_energy:     current energy stored in the battery (Wh).
+  - export_simulated:  cumulative energy exported to the grid after
+                       charging the battery (Wh, daily).
+  - import_simulated:  cumulative energy import after battery discharge
+                       (Wh, daily).
+  - daily_savings_pln: reduced import cost in PLN, computed from
+                       (import - import_simulated) * price_per_kwh.
+
+State (stored_energy, import_simulated, export_simulated) is persisted
+across runs by re-reading the last value from InfluxDB, ensuring
+multi-year continuity. Counters that reset at midnight in the source data 
+are mirrored in the simulated counters.
+"""
+
 import sys
 import os
 import pandas as pd
@@ -88,7 +109,7 @@ from(bucket: "{INFLUX_BUCKET}")
         m_export = row['export']
         m_import = row['import']
 
-        # Counter reset (midnight): reset simulated counters to 0, skip increment
+        # Counter reset at midnight: reset simulated counters to 0, skip increment
         if m_export < 0:
             current_export_sim = 0
             m_export = 0
@@ -129,7 +150,7 @@ from(bucket: "{INFLUX_BUCKET}")
     df_sim_gold = df_sim.melt(ignore_index=False, var_name='measurement_type', value_name='value')
     df_sim_gold['device'] = 'Battery_Simulator_10kWh'
 
-    # Selecting final columns for write consistency
+    # Select relevant columns only
     final_sim_gold = df_sim_gold[['value', 'device', 'measurement_type']]
 
     write_api.write(bucket=INFLUX_BUCKET, record=final_sim_gold,

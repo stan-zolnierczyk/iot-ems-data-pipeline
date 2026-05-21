@@ -1,3 +1,19 @@
+"""
+Silver Layer ETL for the IoT Energy Management System.
+
+Transforms raw Bronze-layer telemetry from InfluxDB into a validated and
+cleaned dataset, writing results to the power_clean and energy_clean
+measurements. Cleaning includes domain-aware range filtering, linear
+interpolation of gaps in instantaneous power, and rolling-median removal
+of upward spikes on cumulative energy counters. Downward movements 
+are intentionally preserved to allow for midnight counter resets.
+
+
+The script uses incremental loading driven by the last processed timestamp, 
+making it immune to a random-frequency runs (the script is run non-deterministically, 
+despite being scheduled to run every 5 minutes via GitHub Actions).
+"""
+
 import sys
 import os
 import pandas as pd
@@ -33,8 +49,7 @@ def filter_upward_spikes(series, window=5, max_spike_wh=ENERGY_MAX_INCREMENT_WH)
     """
     Replaces upward spikes with the centered rolling median. A value is treated
     as a spike if it exceeds the rolling median by more than max_spike_wh.
-    Downward movements (e.g., midnight counter resets) are NOT touched, so
-    daily counters that reset at 00:00 pass through unchanged.
+    Downward drops are NOT touched to allow for midnight counter resets.
     """
     rolling_median = series.rolling(window, center=True, min_periods=1).median()
     spike_mask = (series - rolling_median) > max_spike_wh
@@ -45,7 +60,7 @@ def filter_upward_spikes(series, window=5, max_spike_wh=ENERGY_MAX_INCREMENT_WH)
 def process_silver_layer():
     """
     ETL Process: Bronze to Silver Layer.
-    Handles data validation, cleaning, and normalization for IoT energy metrics.
+    Handles data validation, cleaning, and normalization for IoT power and energy metrics.
     """
     client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
     query_api = client.query_api()
@@ -149,9 +164,7 @@ def process_silver_layer():
         # Incremental Load friendly: fill gaps and maintain counters
         df_calc = df_calc.sort_index().ffill().fillna(0.0)
 
-        # 5. Filter upward spikes in source counters (rolling-median based).
-        # Downward jumps are preserved so daily midnight resets pass through
-        # naturally; gold_aggregator.py handles negative diffs at reset boundary.
+        # 5. Filter upward spikes in source counters (rolling-median based)
         for col in ['production', 'import', 'export']:
             df_calc[col] = filter_upward_spikes(df_calc[col])
 
