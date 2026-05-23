@@ -32,7 +32,7 @@ graph TD
         subgraph BRONZE_LAYER ["🥉 Bronze Layer (Raw Storage)"]
             INF_B[(InfluxDB Cloud <br> measurement: power & energy)]
         end
-        GH -->|HttpRequest via REST API <br> Over Internet| INF_B
+        GH -->|HttpRequest via REST API <br> Over Internet <br> (pushed in 1-minute Intervals)| INF_B
         class BRONZE_LAYER,INF_B bronzeStyle;
 
         %% WARSTWA SILVER
@@ -71,3 +71,5 @@ graph TD
         CSV --> REP
         class PRESENTATION,GRA,REP vizStyle;
 ```
+
+![EMS Dashboard if Grafana](img/grafana_dashboard_full.JPG)
