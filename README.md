@@ -144,8 +144,6 @@ A publicly accessible live dashboard is available here:
 
 ---
 
-## Challengess and Future Improvements
-
 <!-- na końcu jeszcze wyzwania i to co można by zrobić lepiej:
 (wytłumaczenie, że ten pipeline działa, ale jest 'cost-optimized' i gdyby miał być wdrożony na produkcję to trzeba by dokonać kilku 'improvements')
 - poprawa jakości danych PowerBalance - średnia krocząca z ostatnich 10minut, filtrowanie 'pików'
@@ -155,3 +153,27 @@ A publicly accessible live dashboard is available here:
 
 
  -->
+
+## 🚀 Production Scaling, Challenges & Future Improvements
+
+While this data pipeline is fully functional and architecture-complete, it is intentionally scaled down and **cost-optimized for individual deployment**. To elevate this system into a mission-critical, enterprise-grade production environment, the following structural enhancements should be implemented:
+
+### 1. Edge Ingestion & Transport Resilience (MQTT Migration)
+
+- **Current State:** The Grenton HTTP POST mechanism operates on a synchronous, request-response basis, exposing the edge gateway to localized data loss if internet connectivity or the cloud API drops out.
+- **Production Improvement:** Integrate a retry logic with an exponential backoff directly at the edge layer. Ideally, migrate from REST HTTP to an asynchronous **MQTT protocol with QoS 1/2** managed by an edge broker (e.g., Eclipse Mosquitto). This introduces a local buffer ensuring guaranteed message delivery during network outages.
+
+### 2. Advanced Stream Analytics for Operational Telemetry
+
+- **Current State:** The smart meter produces high-frequency, noisy data streams (`powerBalance`) where momentary load spikes directly skew instantaneous calculations.
+- **Production Improvement:** Implement an analytical pre-processing layer using moving averages (e.g., a 10-minute rolling average) and outlier clamping directly before the Bronze layer storage. This will provide smoother trending indicators.
+
+### 3. Production Orchestration & Compute Environment
+
+- **Current State:** Python ETL pipelines run on ephemeral GitHub Actions runners triggered by basic cron schedulers. Execution latency and execution time depend heavily on GitHub infrastructure availability.
+- **Production Improvement:** Migrate data compute tasks to dedicated cloud-native environments (e.g., AWS EC2, GCP Compute Engine, or a lightweight Kubernetes pod). For enterprise scaling, the cron configuration should be replaced by a proper data orchestrator like **Apache Airflow** or **Prefect**.
+
+### 4. Enterprise-Grade Cloud Data Lake
+
+- **Current State:** Cold storage is maintained in a simple, file-based repository CSV structure to operate completely within free-tier ecosystem limitations.
+- **Production Improvement:** Replace the GitHub-hosted CSV with a cloud object store behaving as a proper **Data Lake / Delta Lake** (e.g., AWS S3 or Google Cloud Storage).
