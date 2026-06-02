@@ -4,8 +4,6 @@
 
 End-to-end time-series data pipeline for IoT-based energy management: data ingestion, cleaning, aggregation, and analytics using InfluxDB, Grafana, and Python.
 
-<!-- DŁUGI OPIS -->
-
 The primary business objective of this project was to build a **Digital Twin** simulating a 10kWh Energy Storage System (ESS) to calculate financial ROI, long-term energy self-sufficiency, and investment payback period under the G11 tariff framework in Poland.
 
 ## 🏗️ Core Architecture & Data Lineage
@@ -124,10 +122,26 @@ Energy and power-balance telemetry is retrieved from InfluxDB using the native *
 The dashboard combines:
 
 - real-time power telemetry
-- energy flow analytics
-- ESS Digital Twin simulation metrics
-- cumulative financial savings projections
+<p align="center">
+  <img src="img/power_balance.JPG" alt="EMS Dashboard if Grafana" width="80%">
+</p>
 
+- energy flow analytics
+<p align="center">
+  <img src="img/pv_production.JPG" alt="EMS Dashboard if Grafana" width="43%">
+  <img src="img/import_export_consumption.JPG" alt="EMS Dashboard if Grafana" width="55%">
+</p>
+
+- ESS Digital Twin simulation metrics
+<p align="center">
+  <img src="img/stored_energy.JPG" alt="EMS Dashboard if Grafana" width="48%">
+  <img src="img/import_import_simulated.JPG" alt="EMS Dashboard if Grafana" width="48%">
+</p>
+
+- cumulative financial savings projections
+<p align="center">
+  <img src="img/total_savings.JPG" alt="EMS Dashboard if Grafana" width="80%">
+</p>
 To enforce GitOps principles and ensure full infrastructure reproducibility (**Dashboard as Code**), the complete dashboard configuration is version-controlled and stored as a JSON definition within the `/src` directory of the repository.
 
 A publicly accessible live dashboard is available here:
@@ -135,24 +149,8 @@ A publicly accessible live dashboard is available here:
 👉 **[Grafana Cloud EMS Dashboard](https://stanzolnierczyk.grafana.net/public-dashboards/8944e607f33d4e4a9fdd7d765f767c40)**
 
 <!-- zamiast tego widoku dashboardu dodać pojedyńcze wykresy z wyjaśnieniami -->
-<p align="center">
-  <img src="img/grafana_dashboard_full.JPG" alt="EMS Dashboard if Grafana" width="90%">
-</p>
-
-<!-- DOTĄD przeczytane i poprawione opisy
- -->
 
 ---
-
-<!-- na końcu jeszcze wyzwania i to co można by zrobić lepiej:
-(wytłumaczenie, że ten pipeline działa, ale jest 'cost-optimized' i gdyby miał być wdrożony na produkcję to trzeba by dokonać kilku 'improvements')
-- poprawa jakości danych PowerBalance - średnia krocząca z ostatnich 10minut, filtrowanie 'pików'
-- retry logic dla POST request. Idealnie zastąpić MQTT który śledzi dostarczenie
-- wykonywanie skryptów Pythona na dedykowanej wirtualnej maszynie (nie Github actions), co zapewnia większą stabilność i przewidywalność wykonania
-- Cold Storage jako profesjonalny Data Lake w chmurze
-
-
- -->
 
 ## 🚀 Production Scaling, Challenges & Future Improvements
 
