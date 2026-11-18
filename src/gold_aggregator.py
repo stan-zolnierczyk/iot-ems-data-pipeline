@@ -74,7 +74,7 @@ def process_aggregation():
         }
 
         # Resample to full clock hours using mean
-        df_power_gold = df[available_power].resample('1H', label='left').mean()
+        df_power_gold = df[available_power].resample('1h', label='left').mean()
 
         # Unpivot and re-assign metadata
         df_power_gold = df_power_gold.melt(ignore_index=False, var_name='measurement_type', value_name='value').dropna()
@@ -101,7 +101,7 @@ def process_aggregation():
 
         # Resample and calculate delta (consumption within the hour)
         # Note: sorting before diff is critical for cumulative counters
-        df_energy_hourly = df[available_energy].sort_index().resample('1H', label='left').last().diff()
+        df_energy_hourly = df[available_energy].sort_index().resample('1h', label='left').last().diff()
 
         # Data Quality: drop initial NaN from diff and prevent negative values from resets
         df_energy_hourly = df_energy_hourly.dropna()
